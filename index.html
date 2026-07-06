@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Spieltag Marker</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0e1412">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<style>
+  :root{
+    --bg:#0e1412; --panel:#18211d; --line:#2c3a33;
+    --ink:#f2f7f4; --dim:#8fa39a;
+    --green:#3ddc84; --green-deep:#1f8f54;
+    --red:#e05555; --amber:#ffc94d;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;overflow:hidden}
+  body{
+    background:var(--bg);color:var(--ink);
+    font-family:system-ui,-apple-system,sans-serif;
+    max-width:560px;margin:0 auto;height:100dvh;
+    display:flex;flex-direction:column;
+  }
+  button{font-family:inherit;cursor:pointer}
+
+  /* ======= Feststehender oberer Bereich ======= */
+  .top{
+    flex:none;padding:12px 12px 10px;display:flex;flex-direction:column;gap:10px;
+    background:var(--bg);border-bottom:1px solid var(--line);
+  }
+
+  .camrow{display:flex;gap:8px;justify-content:flex-end}
+  .cam{
+    display:flex;align-items:center;gap:8px;
+    background:none;border:1px solid var(--line);border-radius:999px;
+    padding:6px 12px;font-size:12.5px;color:var(--dim);
+  }
+  .cam .dot{width:8px;height:8px;border-radius:50%;background:var(--red)}
+  .cam.connected{color:var(--ink)}
+  .cam.connected .dot{background:var(--green)}
+  .cam.searching .dot{background:var(--amber)}
+  .rec{
+    display:none;align-items:center;gap:8px;
+    background:none;border:1px solid var(--line);border-radius:999px;
+    padding:6px 12px;font-size:12.5px;color:var(--dim);
+  }
+  .rec.show{display:flex}
+
+  .board{
+    background:var(--panel);border-radius:14px;padding:14px 16px;
+    display:flex;align-items:baseline;justify-content:space-between;
+  }
+  .gameClock{font-size:48px;font-weight:800;color:var(--green);font-variant-numeric:tabular-nums;line-height:1}
+  .videoClock{font-size:15px;color:var(--dim);font-variant-numeric:tabular-nums}
+  .phase{font-size:12.5px;color:var(--amber);min-height:16px;padding:0 4px}
+
+  .flow{display:flex;gap:8px}
+  .flow button{
+    flex:1;padding:14px 4px;border-radius:12px;border:none;
+    font-size:15px;font-weight:700;color:var(--ink);background:var(--panel);
+  }
+  .flow .start{background:var(--green-deep)}
+  .flow .end{background:#57272a;color:#ffc6c6}
+
+  .actions{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+  .actions button{
+    padding:15px 4px;border-radius:12px;border:1px solid var(--line);
+    background:var(--panel);color:var(--ink);font-size:15px;font-weight:600;
+  }
+  .actions button:disabled{opacity:.3}
+  .actions .tor{border-color:var(--green-deep)}
+  .actions .gegentor{border-color:#6b2f33}
+
+  /* ======= Scrollbarer Markerbereich ======= */
+  .logwrap{flex:1;display:flex;flex-direction:column;min-height:0;padding:8px 12px 12px}
+  .logLbl{flex:none;font-size:12px;color:var(--dim);padding:0 4px 8px}
+  .log{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:8px}
+  .entry{
+    background:var(--panel);border-radius:12px;padding:14px;
+    display:flex;gap:12px;align-items:center;flex:none;
+  }
+  .entry .t{font-size:20px;font-weight:800;color:var(--green);font-variant-numeric:tabular-nums;white-space:nowrap}
+  .entry .body{flex:1;min-width:0}
+  .entry .a{font-size:17px;font-weight:700}
+  .entry .a .nr{color:var(--amber)}
+  .entry .meta{font-size:12.5px;color:var(--dim);margin-top:2px}
+  .entry .c{font-size:15px;opacity:.85;margin-top:4px}
+  .entry .del{
+    background:none;border:1px solid var(--line);color:var(--dim);
+    border-radius:10px;padding:10px 12px;font-size:14px;
+  }
+  .entry .del.confirm{background:var(--red);border-color:var(--red);color:#fff}
+  .empty{color:var(--dim);font-size:14px;text-align:center;padding:30px 16px}
+
+  /* ======= Sheets ======= */
+  .sheet-bg{
+    position:fixed;inset:0;background:rgba(0,0,0,.65);display:none;
+    align-items:flex-end;justify-content:center;z-index:20;
+  }
+  .sheet-bg.open{display:flex}
+  .sheet{
+    width:100%;max-width:560px;background:#1c2622;
+    border-radius:18px 18px 0 0;padding:20px 16px 24px;
+    max-height:88dvh;overflow-y:auto;
+  }
+  .sheet h3{font-size:17px;font-weight:800}
+  .sheet .sub{font-size:13px;color:var(--green);margin:2px 0 14px;font-variant-numeric:tabular-nums}
+  .sheet p{font-size:14px;color:var(--dim);margin-bottom:14px;line-height:1.5}
+  .numlbl{font-size:12px;color:var(--dim);margin-bottom:8px}
+  .nums{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-bottom:14px}
+  .nums button{
+    padding:12px 0;border-radius:9px;border:1px solid var(--line);
+    background:var(--bg);color:var(--ink);font-size:15px;font-weight:600;
+  }
+  .nums button.sel{background:var(--green-deep);border-color:var(--green);color:#fff}
+  .sheet textarea, .sheet input[type=text]{
+    width:100%;background:var(--bg);border:1px solid var(--line);
+    border-radius:10px;color:var(--ink);font-family:inherit;font-size:16px;padding:12px;
+  }
+  .sheet textarea{min-height:76px;resize:none}
+  .sheet .row{display:flex;gap:8px;margin-top:14px}
+  .sheet .row button{
+    flex:1;padding:14px;border-radius:10px;border:none;
+    background:var(--panel);color:var(--ink);font-size:15px;font-weight:700;
+  }
+  .sheet .row .save{background:var(--green-deep)}
+  .okmsg{font-size:13.5px;color:var(--green);margin-top:10px;min-height:17px;text-align:center}
+</style>
+</head>
+<body>
+
+<!-- ======= bleibt beim Scrollen immer stehen ======= -->
+<div class="top">
+  <div class="camrow">
+    <button class="rec" id="recBtn" onclick="recInfo()">● Aufnahme (Stufe 2)</button>
+    <button class="cam" id="camBtn" onclick="connectCamera()">
+      <span class="dot"></span><span id="camLbl">Kamera verbinden</span>
+    </button>
+  </div>
+
+  <div class="board">
+    <div class="gameClock" id="gameClock">00:00</div>
+    <div class="videoClock" id="videoClock">Video 00:00:00</div>
+  </div>
+  <div class="phase" id="phase">Aufnahme an der Kamera starten, dann Anpfiff tippen</div>
+
+  <div class="flow">
+    <button class="start" id="btnKickoff" onclick="kickoff()">Anpfiff</button>
+    <button id="btnHalf" onclick="halftime()">Halbzeit</button>
+    <button class="end" id="btnEnd" onclick="fullTime()">Abpfiff</button>
+  </div>
+
+  <div class="actions" id="actionGrid">
+    <button class="tor" onclick="mark('Tor',true)" disabled>Tor</button>
+    <button class="gegentor" onclick="mark('Gegentor',true)" disabled>Gegentor</button>
+    <button onclick="mark('Chance')" disabled>Chance</button>
+    <button onclick="mark('Foul')" disabled>Foul</button>
+    <button onclick="mark('Ecke')" disabled>Ecke</button>
+    <button onclick="mark('Karte')" disabled>Karte</button>
+    <button onclick="mark('Wechsel')" disabled>Wechsel</button>
+    <button onclick="mark('Taktik')" disabled>Taktik</button>
+    <button onclick="mark('Eigener')" disabled>Eigener</button>
+  </div>
+</div>
+
+<!-- ======= nur dieser Bereich scrollt ======= -->
+<div class="logwrap">
+  <div class="logLbl" id="logLbl">Marker (0)</div>
+  <div class="log" id="log">
+    <div class="empty">Noch keine Marker.</div>
+  </div>
+</div>
+
+<!-- Kommentar-Sheet -->
+<div class="sheet-bg" id="sheetBg">
+  <div class="sheet">
+    <h3 id="sheetTitle">Kommentar</h3>
+    <div class="sub" id="sheetTime"></div>
+    <div id="numArea" style="display:none">
+      <div class="numlbl">Rückennummer</div>
+      <div class="nums" id="numGrid"></div>
+    </div>
+    <textarea id="sheetText" placeholder="Kommentar (optional)"></textarea>
+    <div class="row">
+      <button onclick="closeSheet(false)">Verwerfen</button>
+      <button class="save" onclick="closeSheet(true)">Speichern</button>
+    </div>
+  </div>
+</div>
+
+<!-- 2. Halbzeit: lief die Kamera durch? -->
+<div class="sheet-bg" id="resumeBg">
+  <div class="sheet">
+    <h3>2. Halbzeit starten</h3>
+    <p>Lief die Kamera in der Pause durch, oder wurde die Aufnahme gestoppt und neu gestartet?</p>
+    <div class="row">
+      <button onclick="resumeSecond(false)">Lief durch<br><small style="font-weight:400;color:var(--dim)">eine Videodatei</small></button>
+      <button class="save" onclick="resumeSecond(true)">Neu gestartet<br><small style="font-weight:400;opacity:.8">zweite Videodatei</small></button>
+    </div>
+  </div>
+</div>
+
+<!-- Abpfiff / Speichern -->
+<div class="sheet-bg" id="endBg">
+  <div class="sheet">
+    <h3>Abpfiff — Marker speichern</h3>
+    <div class="sub" id="endSummary"></div>
+    <div class="numlbl">Dateiname</div>
+    <input type="text" id="fileName" value="">
+    <div class="row">
+      <button onclick="cancelEnd()">Zurück</button>
+      <button class="save" onclick="confirmEnd()">Herunterladen</button>
+    </div>
+    <div class="row">
+      <button onclick="copyEnd()">Falls Download blockiert: Daten kopieren</button>
+    </div>
+    <div class="okmsg" id="okMsg"></div>
+  </div>
+</div>
+
+<!-- Info Fernsteuerung -->
+<div class="sheet-bg" id="recBg">
+  <div class="sheet">
+    <h3>Aufnahme-Fernsteuerung</h3>
+    <p>Die Bluetooth-Verbindung steht — aber Starten/Stoppen/Pausieren der Aufnahme braucht das DJI-Steuerprotokoll, das auf das genaue Kameramodell abgestimmt und mit der echten Kamera getestet werden muss. Das ist die nächste Ausbaustufe.</p>
+    <div class="row">
+      <button class="save" onclick="$('recBg').classList.remove('open')">Verstanden</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ============ Zustand ============ */
+let state = 'idle';
+let videoStart = null;
+let fileNo = 1;
+let gameElapsedBase = 0;
+let gameRunningSince = null;
+let half = 1;
+let markers = [];
+let pendingMarker = null;
+let pendingNumber = null;
+let tick = null;
+
+const $ = id => document.getElementById(id);
+
+function fmtGame(ms){
+  const s = Math.floor(ms/1000);
+  return String(Math.floor(s/60)).padStart(2,'0') + ':' + String(s%60).padStart(2,'0');
+}
+function fmtVideo(ms){
+  const s = Math.floor(ms/1000);
+  return String(Math.floor(s/3600)).padStart(2,'0')+':'+String(Math.floor((s%3600)/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0');
+}
+function videoNow(){ return videoStart ? Date.now() - videoStart : 0; }
+function gameNow(){ return gameElapsedBase + (gameRunningSince ? Date.now() - gameRunningSince : 0); }
+function render(){
+  $('videoClock').textContent = 'Video' + (fileNo===2?' 2':'') + ' ' + fmtVideo(videoNow());
+  $('gameClock').textContent = fmtGame(gameNow());
+}
+
+/* ============ Spielsteuerung ============ */
+function kickoff(){
+  if(state === 'idle' || state === 'done'){
+    videoStart = Date.now();
+    fileNo = 1;
+    gameElapsedBase = 0;
+    gameRunningSince = Date.now();
+    half = 1;
+    if(state === 'done'){ markers = []; renderLog(); }
+    state = 'firstHalf';
+    $('phase').textContent = '1. Halbzeit läuft';
+    $('btnKickoff').textContent = 'Anpfiff';
+    setActions(true);
+    clearInterval(tick);
+    tick = setInterval(render, 250);
+    render();
+  } else if(state === 'halftime'){
+    $('resumeBg').classList.add('open');
+  }
+}
+
+function resumeSecond(newFile){
+  $('resumeBg').classList.remove('open');
+  if(newFile){
+    fileNo = 2;
+    videoStart = Date.now();
+  }
+  gameRunningSince = Date.now();
+  state = 'secondHalf';
+  half = 2;
+  $('phase').textContent = '2. Halbzeit läuft' + (newFile ? ' — Videodatei 2' : '');
+  $('btnKickoff').textContent = 'Anpfiff';
+  setActions(true);
+  render();
+}
+
+function halftime(){
+  if(state !== 'firstHalf' && state !== 'secondHalf'){
+    $('phase').textContent = 'Halbzeit geht nur bei laufender Uhr';
+    return;
+  }
+  gameElapsedBase = gameNow();
+  gameRunningSince = null;
+  state = 'halftime';
+  $('phase').textContent = 'Halbzeit — Spieluhr pausiert';
+  $('btnKickoff').textContent = '2. Halbzeit';
+  setActions(false);
+}
+
+function fullTime(){
+  if(state === 'idle'){
+    $('phase').textContent = 'Erst Anpfiff tippen — dann kann abgepfiffen werden';
+    return;
+  }
+  gameElapsedBase = gameNow();
+  gameRunningSince = null;
+  state = 'done';
+  clearInterval(tick);
+  render();
+  $('phase').textContent = 'Abpfiff';
+  $('btnKickoff').textContent = 'Neues Spiel';
+  setActions(false);
+  $('endSummary').textContent = markers.length + ' Marker · Spielzeit ' + fmtGame(gameElapsedBase);
+  $('fileName').value = 'spiel-' + new Date().toISOString().slice(0,10);
+  $('okMsg').textContent = '';
+  $('endBg').classList.add('open');
+}
+function cancelEnd(){ $('endBg').classList.remove('open'); }
+
+function buildExport(){
+  return JSON.stringify({
+    exportiert: new Date().toISOString(),
+    spielzeit: fmtGame(gameElapsedBase),
+    marker: markers.map(m => ({
+      datei: m.fileNo,
+      videozeit: fmtVideo(m.videoMs), videoMs: m.videoMs,
+      spielzeit: fmtGame(m.gameMs),
+      halbzeit: m.half, aktion: m.action,
+      rueckennummer: m.number, kommentar: m.comment
+    }))
+  }, null, 2);
+}
+function confirmEnd(){
+  const name = ($('fileName').value.trim() || 'spiel').replace(/[^\wäöüÄÖÜß\- ]/g,'');
+  try{
+    download(name + '.json', buildExport(), 'application/json');
+    $('okMsg').textContent = 'Download gestartet: ' + name + '.json';
+  }catch(e){
+    $('okMsg').textContent = 'Download blockiert — bitte "Daten kopieren" nutzen';
+  }
+}
+async function copyEnd(){
+  try{
+    await navigator.clipboard.writeText(buildExport());
+    $('okMsg').textContent = 'In die Zwischenablage kopiert';
+  }catch(e){
+    $('okMsg').textContent = 'Kopieren nicht möglich';
+  }
+}
+
+function setActions(on){
+  document.querySelectorAll('#actionGrid button').forEach(b => b.disabled = !on);
+}
+
+/* ============ Marker ============ */
+function mark(action, withNumber){
+  pendingMarker = { action, half, fileNo, videoMs: videoNow(), gameMs: gameNow(), number:null, comment:'' };
+  pendingNumber = null;
+  $('sheetTitle').textContent = action;
+  $('sheetTime').textContent = fmtGame(pendingMarker.gameMs) + ' · Video' + (fileNo===2?' 2':'') + ' ' + fmtVideo(pendingMarker.videoMs);
+  $('sheetText').value = '';
+  $('numArea').style.display = withNumber ? 'block' : 'none';
+  if(withNumber) buildNumGrid();
+  $('sheetBg').classList.add('open');
+}
+
+function buildNumGrid(){
+  const g = $('numGrid');
+  g.innerHTML = '';
+  for(let n=1;n<=25;n++){
+    const b = document.createElement('button');
+    b.textContent = n;
+    b.onclick = () => {
+      pendingNumber = (pendingNumber === n) ? null : n;
+      g.querySelectorAll('button').forEach(x=>x.classList.remove('sel'));
+      if(pendingNumber !== null) b.classList.add('sel');
+    };
+    g.appendChild(b);
+  }
+}
+
+function closeSheet(save){
+  if(pendingMarker && save){
+    pendingMarker.comment = $('sheetText').value.trim();
+    pendingMarker.number = pendingNumber;
+    markers.push(pendingMarker);
+    markers.sort((a,b)=> (a.fileNo-b.fileNo) || (a.videoMs-b.videoMs));
+    renderLog();
+  }
+  pendingMarker = null;
+  pendingNumber = null;
+  $('sheetBg').classList.remove('open');
+}
+
+let delArm = null;
+function delMarker(i){
+  if(delArm === i){
+    markers.splice(i,1);
+    delArm = null;
+    renderLog();
+  } else {
+    delArm = i;
+    renderLog();
+    setTimeout(()=>{ if(delArm === i){ delArm = null; renderLog(); } }, 2500);
+  }
+}
+
+function renderLog(){
+  $('logLbl').textContent = 'Marker (' + markers.length + ')';
+  const log = $('log');
+  if(!markers.length){
+    log.innerHTML = '<div class="empty">Noch keine Marker.</div>';
+    return;
+  }
+  log.innerHTML = markers.map((m,i)=>`
+    <div class="entry">
+      <div class="t">${fmtGame(m.gameMs)}</div>
+      <div class="body">
+        <div class="a">${esc(m.action)}${m.number ? ' <span class="nr">Nr. '+m.number+'</span>' : ''}</div>
+        <div class="meta">HZ${m.half} · Video${m.fileNo===2?' 2':''} ${fmtVideo(m.videoMs)}</div>
+        ${m.comment ? '<div class="c">'+esc(m.comment)+'</div>' : ''}
+      </div>
+      <button class="del ${delArm===i?'confirm':''}" onclick="delMarker(${i})">${delArm===i?'Sicher?':'🗑'}</button>
+    </div>`).join('');
+}
+function esc(s){ return s.replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+/* ============ Download ============ */
+function download(name, text, type){
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([text], {type}));
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(a.href);
+}
+
+/* ============ Kamera ============ */
+let btDevice = null;
+function recInfo(){ $('recBg').classList.add('open'); }
+
+async function connectCamera(){
+  const btn = $('camBtn'), lbl = $('camLbl');
+  if(btDevice && btDevice.gatt.connected){ btDevice.gatt.disconnect(); return; }
+  if(!navigator.bluetooth){
+    lbl.textContent = 'Bluetooth hier nicht verfügbar';
+    setTimeout(()=>{ if(!btDevice) lbl.textContent = 'Kamera verbinden'; }, 3000);
+    return;
+  }
+  try{
+    btn.classList.add('searching');
+    lbl.textContent = 'Suche…';
+    btDevice = await navigator.bluetooth.requestDevice({
+      filters: [{namePrefix:'DJI'},{namePrefix:'Osmo'},{namePrefix:'OA'}],
+      optionalServices: [0xfff0]
+    });
+    btDevice.addEventListener('gattserverdisconnected', ()=>{
+      btn.classList.remove('connected','searching');
+      lbl.textContent = 'Kamera verbinden';
+      $('recBtn').classList.remove('show');
+    });
+    await btDevice.gatt.connect();
+    btn.classList.remove('searching');
+    btn.classList.add('connected');
+    lbl.textContent = btDevice.name || 'Verbunden';
+    $('recBtn').classList.add('show');
+  }catch(e){
+    btn.classList.remove('searching','connected');
+    lbl.textContent = 'Kamera verbinden';
+    btDevice = null;
+  }
+}
+
+
+/* ============ Automatisches Speichern auf dem Gerät ============ */
+const STORE = 'spieltag-marker-state';
+function saveState(){
+  try{
+    localStorage.setItem(STORE, JSON.stringify({
+      state, videoStart, fileNo, gameElapsedBase, gameRunningSince, half, markers
+    }));
+  }catch(e){}
+}
+function loadState(){
+  try{
+    const raw = localStorage.getItem(STORE);
+    if(!raw) return;
+    const s = JSON.parse(raw);
+    if(s.state === 'idle' || s.state === 'done') { markers = s.markers || []; renderLog(); return; }
+    state = s.state; videoStart = s.videoStart; fileNo = s.fileNo || 1;
+    gameElapsedBase = s.gameElapsedBase || 0; gameRunningSince = s.gameRunningSince;
+    half = s.half || 1; markers = s.markers || [];
+    renderLog();
+    if(state === 'firstHalf' || state === 'secondHalf'){
+      $('phase').textContent = (half===1?'1.':'2.') + ' Halbzeit läuft';
+      setActions(true);
+      tick = setInterval(render, 250);
+    } else if(state === 'halftime'){
+      $('phase').textContent = 'Halbzeit — Spieluhr pausiert';
+      $('btnKickoff').textContent = '2. Halbzeit';
+      tick = setInterval(render, 250);
+    }
+  }catch(e){}
+}
+// bei jeder Änderung speichern
+const _origRenderLog = renderLog;
+renderLog = function(){ _origRenderLog(); saveState(); };
+['kickoff','resumeSecond','halftime','fullTime'].forEach(fn => {
+  const orig = window[fn];
+  window[fn] = function(...a){ orig.apply(this,a); saveState(); };
+});
+loadState();
+
+/* ============ Offline-Fähigkeit ============ */
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.register('sw.js').catch(()=>{});
+}
+
+render();
+</script>
+</body>
+</html>
