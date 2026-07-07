@@ -244,6 +244,9 @@
       <button id="btnDl2" onclick="downloadSecond()" disabled>Datei 2 — Ausführliche Liste</button>
     </div>
     <div class="row">
+      <button onclick="shareFiles()">Falls Download nicht geht: Teilen-Menü</button>
+    </div>
+    <div class="row">
       <button onclick="cancelEnd()">Zurück</button>
     </div>
     <div class="okmsg" id="okMsg"></div>
@@ -309,7 +312,13 @@ function kickoff(){
     render();
     attemptAutoRecord(true);
   } else if(state === 'halftime'){
-    $('resumeBg').classList.add('open');
+    if(djiWriteChar){
+      // Kamera per Bluetooth verbunden — wird nur bei Anpfiff/Abpfiff gesteuert,
+      // lief also garantiert durch. Keine Rückfrage nötig.
+      resumeSecond(false);
+    } else {
+      $('resumeBg').classList.add('open');
+    }
   }
 }
 
@@ -463,6 +472,25 @@ function buildExportDetail(){
     );
   });
   return lines.join('\n');
+}
+
+async function shareFiles(){
+  const name = ($('fileName').value.trim() || 'spiel').replace(/[^\wäöüÄÖÜß\- ]/g,'');
+  try{
+    const f1 = new File([buildExportAnalyzer()], name + '-analyzer.txt', {type:'text/plain'});
+    const f2 = new File([buildExportDetail()], name + '-details.txt', {type:'text/plain'});
+    if(navigator.canShare && navigator.canShare({files:[f1,f2]})){
+      await navigator.share({files:[f1,f2], title:'Spieltag Marker'});
+      $('okMsg').textContent = 'Über Teilen-Menü gesendet';
+    } else if(navigator.share){
+      await navigator.share({title:'Spieltag Marker (Analyzer)', text: buildExportAnalyzer()});
+      $('okMsg').textContent = 'Analyzer-Daten als Text geteilt';
+    } else {
+      $('okMsg').textContent = 'Teilen hier nicht unterstützt — Download-Buttons oben probieren';
+    }
+  }catch(e){
+    $('okMsg').textContent = 'Teilen abgebrochen';
+  }
 }
 
 function downloadFirst(){
