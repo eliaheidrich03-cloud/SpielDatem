@@ -210,11 +210,10 @@
     <div class="numlbl">Dateiname</div>
     <input type="text" id="fileName" value="">
     <div class="row">
-      <button onclick="cancelEnd()">Zurück</button>
-      <button class="save" onclick="confirmEnd()">Herunterladen</button>
+      <button class="save" onclick="confirmEnd()">Beide Dateien herunterladen</button>
     </div>
     <div class="row">
-      <button onclick="copyEnd()">Falls Download blockiert: Daten kopieren</button>
+      <button onclick="cancelEnd()">Zurück</button>
     </div>
     <div class="okmsg" id="okMsg"></div>
   </div>
@@ -330,7 +329,53 @@ function fullTime(){
 }
 function cancelEnd(){ $('endBg').classList.remove('open'); }
 
-function buildExport(){
+/* Zeitformat wie im Analyzer-Beispiel: h:mm'ss.cc (Stunde ungepolstert, Zentisekunden) */
+function fmtLegacy(ms){
+  const totalCs = Math.round(ms/10);
+  const cs = totalCs % 100;
+  const totalSec = Math.floor(totalCs/100);
+  const sec = totalSec % 60;
+  const totalMin = Math.floor(totalSec/60);
+  const min = totalMin % 60;
+  const hour = Math.floor(totalMin/60);
+  return hour + ':' + String(min).padStart(2,'0') + "'" + String(sec).padStart(2,'0') + '.' + String(cs).padStart(2,'0');
+}
+
+/* Analyzer-Format: reine Lap/Split-Zeiten, wie vom alten Stoppuhr-Programm erzeugt */
+function buildExportAnalyzer(){
+  const sorted = [...markers].sort((a,b)=>a.gameMs-b.gameMs);
+  const days = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  const now = new Date();
+  const lines = [];
+  lines.push('MCH:\t001');
+  lines.push('');
+  lines.push('Record Date:\t' + now.toISOString().slice(0,10) + '\t' + days[now.getDay()]);
+  lines.push('');
+
+  let prev = 0;
+  const laps = [];
+  sorted.forEach((m,i)=>{
+    const lap = m.gameMs - prev;
+    laps.push(lap);
+    lines.push('Lap' + (i+1) + ':\t' + fmtLegacy(lap) + '\tSplit' + (i+1) + ':\t' + fmtLegacy(m.gameMs));
+    lines.push('');
+    prev = m.gameMs;
+  });
+
+  if(laps.length){
+    const avg = laps.reduce((a,b)=>a+b,0) / laps.length;
+    lines.push('Average Lap Time:   \t' + fmtLegacy(avg));
+    lines.push('Fastest Lap Time:   \t' + fmtLegacy(Math.min(...laps)));
+    lines.push('Slowest Lap Time:   \t' + fmtLegacy(Math.max(...laps)));
+    lines.push('');
+  }
+  lines.push('End Time:       \t' + fmtLegacy(gameElapsedBase));
+  lines.push('-'.repeat(74));
+  return lines.join('\n');
+}
+
+/* Ausführliche Liste mit Aktion, Rückennummer, Kommentar */
+function buildExportDetail(){
   const lines = [];
   lines.push('SPIELTAG MARKER');
   lines.push('Exportiert: ' + new Date().toLocaleString('de-DE'));
@@ -352,21 +397,17 @@ function buildExport(){
   });
   return lines.join('\n');
 }
+
 function confirmEnd(){
   const name = ($('fileName').value.trim() || 'spiel').replace(/[^\wäöüÄÖÜß\- ]/g,'');
   try{
-    download(name + '.txt', buildExport(), 'text/plain');
-    $('okMsg').textContent = 'Download gestartet: ' + name + '.txt';
+    download(name + '-analyzer.txt', buildExportAnalyzer(), 'text/plain');
+    setTimeout(()=>{
+      download(name + '-details.txt', buildExportDetail(), 'text/plain');
+    }, 300); // kleiner Versatz, damit beide Downloads vom Browser zugelassen werden
+    $('okMsg').textContent = 'Download gestartet: ' + name + '-analyzer.txt & ' + name + '-details.txt';
   }catch(e){
-    $('okMsg').textContent = 'Download blockiert — bitte "Daten kopieren" nutzen';
-  }
-}
-async function copyEnd(){
-  try{
-    await navigator.clipboard.writeText(buildExport());
-    $('okMsg').textContent = 'In die Zwischenablage kopiert';
-  }catch(e){
-    $('okMsg').textContent = 'Kopieren nicht möglich';
+    $('okMsg').textContent = 'Download blockiert';
   }
 }
 
