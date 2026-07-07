@@ -159,8 +159,9 @@
       <span class="dot"></span><span id="camLbl">Kamera verbinden</span>
     </button>
   </div>
-  <div class="camrow" style="justify-content:flex-start">
-    <button class="dbg" onclick="connectCamera(true)">Diagnose: alle Geräte suchen</button>
+  <div class="camrow" style="justify-content:flex-start;gap:8px;flex-wrap:wrap">
+    <button class="dbg" onclick="connectCamera(true)">Diagnose: alle Geräte</button>
+    <button class="dbg" onclick="connectCamera('bare')">Diagnose: ohne Dienst-Angabe</button>
   </div>
   <div class="dbglog" id="dbgLog"></div>
 
@@ -588,9 +589,11 @@ async function connectCamera(diagnoseAll){
   try{
     btn.classList.add('searching');
     lbl.textContent = 'Suche…';
-    const options = diagnoseAll
-      ? { acceptAllDevices: true, optionalServices: [0xfff0] }
-      : { filters: [{namePrefix:'DJI'},{namePrefix:'Osmo'},{namePrefix:'OA'}], optionalServices: [0xfff0] };
+    const options = diagnoseAll === 'bare'
+      ? { acceptAllDevices: true }
+      : diagnoseAll
+      ? { acceptAllDevices: true, optionalServices: [DJI_SERVICE_UUID] }
+      : { filters: [{namePrefix:'DJI'},{namePrefix:'Osmo'},{namePrefix:'OA'}], optionalServices: [DJI_SERVICE_UUID] };
     dbg((diagnoseAll ? 'Diagnose' : 'Verbinden') + ' — requestDevice mit: ' + JSON.stringify(options));
     btDevice = await navigator.bluetooth.requestDevice(options);
     dbg('Gerät ausgewählt: ' + (btDevice.name || '(ohne Namen)'));
@@ -633,7 +636,7 @@ function describeError(e){
    und die Prüfsummen-Parameter — hier bestmöglich nachgebaut, aber ohne
    Testgerät nicht hundertprozentig verifiziert. Das Protokoll-Fenster
    zeigt, was tatsächlich gesendet/empfangen wird. */
-const DJI_SERVICE_UUID = 0xfff0;
+const DJI_SERVICE_UUID = '0000fff0-0000-1000-8000-00805f9b34fb';
 let djiWriteChar = null;
 let djiNotifyChar = null;
 let djiSeq = 0;
