@@ -605,8 +605,16 @@ async function connectCamera(){
     btn.classList.remove('searching','connected');
     lbl.textContent = 'Kamera verbinden';
     btDevice = null;
-    dbg('Verbindung fehlgeschlagen: ' + e.message);
+    dbg('Verbindung fehlgeschlagen: ' + describeError(e));
   }
+}
+
+function describeError(e){
+  if(e === undefined || e === null) return '(kein Fehlerobjekt — evtl. Berechtigung fehlt oder Abbruch durch System)';
+  const name = e.name || '';
+  const msg = e.message || '';
+  if(name || msg) return (name ? name + ': ' : '') + (msg || '(ohne Beschreibung)');
+  try{ return JSON.stringify(e); }catch(_){ return String(e); }
 }
 
 /* ============ DJI R SDK — Aufnahmesteuerung (experimentell) ============
@@ -712,7 +720,7 @@ async function setupDjiProtocol(server){
       dbg('Kein beschreibbares Merkmal gefunden — Aufnahmesteuerung nicht möglich');
     }
   }catch(e){
-    dbg('Dienst 0xFFF0 nicht gefunden (' + e.message + ')');
+    dbg('Dienst 0xFFF0 nicht gefunden (' + describeError(e) + ')');
     dbg('→ Diagnose mit App "nRF Connect" empfohlen, um echte Dienst-Kennung zu finden');
   }
 }
@@ -742,7 +750,7 @@ async function attemptAutoRecord(start){
     dbg('Automatisch: Aufnahme ' + (start ? 'gestartet' : 'gestoppt'));
     return true;
   }catch(e){
-    dbg('Automatischer Befehl fehlgeschlagen: ' + e.message);
+    dbg('Automatischer Befehl fehlgeschlagen: ' + describeError(e));
     return false;
   }
 }
