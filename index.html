@@ -6,8 +6,8 @@
 <title>Spieltag Marker</title>
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#0e1412">
-<link rel="icon" href="icons/icon-192.png">
-<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
 <style>
   :root{
     --bg:#0e1412; --panel:#18211d; --line:#2c3a33;
@@ -331,23 +331,32 @@ function fullTime(){
 function cancelEnd(){ $('endBg').classList.remove('open'); }
 
 function buildExport(){
-  return JSON.stringify({
-    exportiert: new Date().toISOString(),
-    spielzeit: fmtGame(gameElapsedBase),
-    marker: markers.map(m => ({
-      datei: m.fileNo,
-      videozeit: fmtVideo(m.videoMs), videoMs: m.videoMs,
-      spielzeit: fmtGame(m.gameMs),
-      halbzeit: m.half, aktion: m.action,
-      rueckennummer: m.number, kommentar: m.comment
-    }))
-  }, null, 2);
+  const lines = [];
+  lines.push('SPIELTAG MARKER');
+  lines.push('Exportiert: ' + new Date().toLocaleString('de-DE'));
+  lines.push('Spielzeit gesamt: ' + fmtGame(gameElapsedBase));
+  lines.push('Anzahl Marker: ' + markers.length);
+  lines.push('');
+  lines.push('Spielzeit | Videozeit | Datei | HZ | Aktion | Nr. | Kommentar');
+  lines.push('-'.repeat(70));
+  markers.forEach(m => {
+    lines.push(
+      fmtGame(m.gameMs) + ' | ' +
+      fmtVideo(m.videoMs) + ' | ' +
+      m.fileNo + ' | ' +
+      'HZ' + m.half + ' | ' +
+      m.action + ' | ' +
+      (m.number ?? '-') + ' | ' +
+      (m.comment || '-')
+    );
+  });
+  return lines.join('\n');
 }
 function confirmEnd(){
   const name = ($('fileName').value.trim() || 'spiel').replace(/[^\wäöüÄÖÜß\- ]/g,'');
   try{
-    download(name + '.json', buildExport(), 'application/json');
-    $('okMsg').textContent = 'Download gestartet: ' + name + '.json';
+    download(name + '.txt', buildExport(), 'text/plain');
+    $('okMsg').textContent = 'Download gestartet: ' + name + '.txt';
   }catch(e){
     $('okMsg').textContent = 'Download blockiert — bitte "Daten kopieren" nutzen';
   }
