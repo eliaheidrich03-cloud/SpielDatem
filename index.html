@@ -42,11 +42,23 @@
   .cam.connected .dot{background:var(--green)}
   .cam.searching .dot{background:var(--amber)}
   .rec{
-    display:none;align-items:center;gap:8px;
+    display:flex;align-items:center;gap:8px;
     background:none;border:1px solid var(--line);border-radius:999px;
     padding:6px 12px;font-size:12.5px;color:var(--dim);
   }
-  .rec.show{display:flex}
+  .rec:disabled{opacity:.35}
+  .rec.active{background:#4a1d1d;border-color:var(--red);color:#ffc6c6}
+  .dbg{
+    background:none;border:1px solid var(--line);border-radius:999px;
+    padding:6px 12px;font-size:12.5px;color:var(--dim);
+  }
+  .dbglog{
+    display:none;max-height:110px;overflow-y:auto;
+    background:var(--panel);border:1px solid var(--line);border-radius:10px;
+    padding:8px 10px;font-family:'SF Mono',Consolas,monospace;font-size:11px;
+    color:var(--dim);white-space:pre-wrap;line-height:1.5;
+  }
+  .dbglog.show{display:block}
 
   .board{
     background:var(--panel);border-radius:14px;padding:14px 16px;
@@ -72,6 +84,13 @@
   .actions button:disabled{opacity:.3}
   .actions .tor{border-color:var(--green-deep)}
   .actions .gegentor{border-color:#6b2f33}
+
+  .resetRow{display:flex;justify-content:center;padding-top:6px}
+  .resetBtn{
+    background:none;border:none;color:var(--dim);
+    font-size:11.5px;padding:6px 10px;text-decoration:underline;
+  }
+  .resetBtn.confirm{color:var(--red);font-weight:700;text-decoration:none}
 
   /* ======= Scrollbarer Markerbereich ======= */
   .logwrap{flex:1;display:flex;flex-direction:column;min-height:0;padding:8px 12px 12px}
@@ -134,11 +153,13 @@
 <!-- ======= bleibt beim Scrollen immer stehen ======= -->
 <div class="top">
   <div class="camrow">
-    <button class="rec" id="recBtn" onclick="recInfo()">● Aufnahme (Stufe 2)</button>
+    <button class="dbg" id="dbgBtn" onclick="toggleDebug()">Protokoll</button>
+    <button class="rec" id="recBtn" onclick="toggleRecording()" disabled>● Aufnahme starten</button>
     <button class="cam" id="camBtn" onclick="connectCamera()">
       <span class="dot"></span><span id="camLbl">Kamera verbinden</span>
     </button>
   </div>
+  <div class="dbglog" id="dbgLog"></div>
 
   <div class="board">
     <div class="gameClock" id="gameClock">00:00</div>
@@ -162,6 +183,9 @@
     <button onclick="mark('Wechsel')" disabled>Wechsel</button>
     <button onclick="mark('Taktik')" disabled>Taktik</button>
     <button onclick="mark('Eigener')" disabled>Eigener</button>
+  </div>
+  <div class="resetRow">
+    <button class="resetBtn" id="resetBtn" onclick="resetAll()">Alles zurücksetzen</button>
   </div>
 </div>
 
@@ -210,7 +234,10 @@
     <div class="numlbl">Dateiname</div>
     <input type="text" id="fileName" value="">
     <div class="row">
-      <button class="save" onclick="confirmEnd()">Beide Dateien herunterladen</button>
+      <button class="save" id="btnDl1" onclick="downloadFirst()">Datei 1 — Analyzer</button>
+    </div>
+    <div class="row">
+      <button id="btnDl2" onclick="downloadSecond()" disabled>Datei 2 — Ausführliche Liste</button>
     </div>
     <div class="row">
       <button onclick="cancelEnd()">Zurück</button>
@@ -219,11 +246,11 @@
   </div>
 </div>
 
-<!-- Info Fernsteuerung -->
+<!-- Hinweis Aufnahme-Steuerung -->
 <div class="sheet-bg" id="recBg">
   <div class="sheet">
-    <h3>Aufnahme-Fernsteuerung</h3>
-    <p>Die Bluetooth-Verbindung steht — aber Starten/Stoppen/Pausieren der Aufnahme braucht das DJI-Steuerprotokoll, das auf das genaue Kameramodell abgestimmt und mit der echten Kamera getestet werden muss. Das ist die nächste Ausbaustufe.</p>
+    <h3>Aufnahme-Fernsteuerung — experimentell</h3>
+    <p>Nutzt das offizielle DJI-R-SDK-Protokoll, funktioniert grundsätzlich mit jeder Osmo Action 4. Da hier ohne Testgerät entwickelt wurde, kann der erste Versuch fehlschlagen. Das Protokoll-Fenster (Button "Protokoll" oben) zeigt an, was die Kamera zurückmeldet — hilfreich, falls etwas nicht klappt.</p>
     <div class="row">
       <button class="save" onclick="$('recBg').classList.remove('open')">Verstanden</button>
     </div>
@@ -276,6 +303,7 @@ function kickoff(){
     clearInterval(tick);
     tick = setInterval(render, 250);
     render();
+    attemptAutoRecord(true);
   } else if(state === 'halftime'){
     $('resumeBg').classList.add('open');
   }
@@ -304,9 +332,42 @@ function halftime(){
   gameElapsedBase = gameNow();
   gameRunningSince = null;
   state = 'halftime';
-  $('phase').textContent = 'Halbzeit — Spieluhr pausiert';
+  $('phase').textContent = 'Halbzeit — Spieluhr pausiert, Kamera läuft weiter';
   $('btnKickoff').textContent = '2. Halbzeit';
   setActions(false);
+}
+
+let resetArm = false;
+function resetAll(){
+  const btn = $('resetBtn');
+  if(!resetArm){
+    resetArm = true;
+    btn.textContent = 'Sicher? Nochmal tippen — löscht alles';
+    btn.classList.add('confirm');
+    setTimeout(()=>{
+      if(resetArm){
+        resetArm = false;
+        btn.textContent = 'Alles zurücksetzen';
+        btn.classList.remove('confirm');
+      }
+    }, 3000);
+    return;
+  }
+  resetArm = false;
+  clearInterval(tick);
+  const wasRecording = recording;
+  state = 'idle';
+  videoStart = null; fileNo = 1; gameElapsedBase = 0; gameRunningSince = null; half = 1;
+  markers = [];
+  pendingMarker = null; pendingNumber = null; delArm = null;
+  renderLog();
+  render();
+  $('phase').textContent = 'Zurückgesetzt — bereit für neuen Anpfiff';
+  $('btnKickoff').textContent = 'Anpfiff';
+  setActions(false);
+  btn.textContent = 'Alles zurücksetzen';
+  btn.classList.remove('confirm');
+  if(wasRecording) attemptAutoRecord(false); // Kamera-Stopp im Hintergrund, blockiert Reset nicht
 }
 
 function fullTime(){
@@ -319,12 +380,14 @@ function fullTime(){
   state = 'done';
   clearInterval(tick);
   render();
+  attemptAutoRecord(false);
   $('phase').textContent = 'Abpfiff';
   $('btnKickoff').textContent = 'Neues Spiel';
   setActions(false);
   $('endSummary').textContent = markers.length + ' Marker · Spielzeit ' + fmtGame(gameElapsedBase);
   $('fileName').value = 'spiel-' + new Date().toISOString().slice(0,10);
   $('okMsg').textContent = '';
+  $('btnDl2').disabled = true;
   $('endBg').classList.add('open');
 }
 function cancelEnd(){ $('endBg').classList.remove('open'); }
@@ -398,14 +461,21 @@ function buildExportDetail(){
   return lines.join('\n');
 }
 
-function confirmEnd(){
+function downloadFirst(){
   const name = ($('fileName').value.trim() || 'spiel').replace(/[^\wäöüÄÖÜß\- ]/g,'');
   try{
     download(name + '-analyzer.txt', buildExportAnalyzer(), 'text/plain');
-    setTimeout(()=>{
-      download(name + '-details.txt', buildExportDetail(), 'text/plain');
-    }, 300); // kleiner Versatz, damit beide Downloads vom Browser zugelassen werden
-    $('okMsg').textContent = 'Download gestartet: ' + name + '-analyzer.txt & ' + name + '-details.txt';
+    $('okMsg').textContent = 'Datei 1 heruntergeladen — jetzt Datei 2 antippen';
+    $('btnDl2').disabled = false;
+  }catch(e){
+    $('okMsg').textContent = 'Download blockiert';
+  }
+}
+function downloadSecond(){
+  const name = ($('fileName').value.trim() || 'spiel').replace(/[^\wäöüÄÖÜß\- ]/g,'');
+  try{
+    download(name + '-details.txt', buildExportDetail(), 'text/plain');
+    $('okMsg').textContent = 'Beide Dateien heruntergeladen';
   }catch(e){
     $('okMsg').textContent = 'Download blockiert';
   }
@@ -507,8 +577,8 @@ async function connectCamera(){
   const btn = $('camBtn'), lbl = $('camLbl');
   if(btDevice && btDevice.gatt.connected){ btDevice.gatt.disconnect(); return; }
   if(!navigator.bluetooth){
-    lbl.textContent = 'Bluetooth hier nicht verfügbar';
-    setTimeout(()=>{ if(!btDevice) lbl.textContent = 'Kamera verbinden'; }, 3000);
+    lbl.textContent = 'Bluetooth hier nicht verfügbar (iPhone: App "Bluefy" nutzen)';
+    setTimeout(()=>{ if(!btDevice) lbl.textContent = 'Kamera verbinden'; }, 4000);
     return;
   }
   try{
@@ -521,18 +591,164 @@ async function connectCamera(){
     btDevice.addEventListener('gattserverdisconnected', ()=>{
       btn.classList.remove('connected','searching');
       lbl.textContent = 'Kamera verbinden';
-      $('recBtn').classList.remove('show');
+      $('recBtn').disabled = true;
+      $('recBtn').textContent = '● Aufnahme starten';
+      djiWriteChar = null; djiNotifyChar = null;
     });
-    await btDevice.gatt.connect();
+    const server = await btDevice.gatt.connect();
     btn.classList.remove('searching');
     btn.classList.add('connected');
     lbl.textContent = btDevice.name || 'Verbunden';
-    $('recBtn').classList.add('show');
+    dbg('BLE verbunden: ' + (btDevice.name || '(unbenannt)'));
+    await setupDjiProtocol(server);
   }catch(e){
     btn.classList.remove('searching','connected');
     lbl.textContent = 'Kamera verbinden';
     btDevice = null;
+    dbg('Verbindung fehlgeschlagen: ' + e.message);
   }
+}
+
+/* ============ DJI R SDK — Aufnahmesteuerung (experimentell) ============
+   Basiert auf der offiziell von DJI veröffentlichten R-SDK-Protokollstruktur
+   (github.com/dji-sdk/Osmo-GPS-Controller-Demo). Diese ist für die gesamte
+   Osmo-Action-Reihe gültig, nicht an eine einzelne Kamera gebunden.
+   Nicht öffentlich dokumentiert sind die genaue Bluetooth-Dienst-Kennung
+   und die Prüfsummen-Parameter — hier bestmöglich nachgebaut, aber ohne
+   Testgerät nicht hundertprozentig verifiziert. Das Protokoll-Fenster
+   zeigt, was tatsächlich gesendet/empfangen wird. */
+const DJI_SERVICE_UUID = 0xfff0;
+let djiWriteChar = null;
+let djiNotifyChar = null;
+let djiSeq = 0;
+let recording = false;
+let debugOn = false;
+
+function dbg(msg){
+  const el = $('dbgLog');
+  el.textContent += new Date().toLocaleTimeString('de-DE') + '  ' + msg + '\n';
+  el.scrollTop = el.scrollHeight;
+}
+function toggleDebug(){
+  debugOn = !debugOn;
+  $('dbgLog').classList.toggle('show', debugOn);
+}
+function toHex(bytes){
+  return [...bytes].map(b=>b.toString(16).padStart(2,'0')).join(' ');
+}
+
+/* CRC-16/CCITT-FALSE (Poly 0x1021, Startwert 0xFFFF) */
+function crc16(bytes){
+  let crc = 0xFFFF;
+  for(const b of bytes){
+    crc ^= (b << 8);
+    for(let i=0;i<8;i++){
+      crc = (crc & 0x8000) ? ((crc << 1) ^ 0x1021) & 0xFFFF : (crc << 1) & 0xFFFF;
+    }
+  }
+  return crc;
+}
+/* CRC-32 (IEEE 802.3, Poly 0xEDB88320) */
+function crc32(bytes){
+  let crc = 0xFFFFFFFF;
+  for(const b of bytes){
+    crc ^= b;
+    for(let i=0;i<8;i++){
+      crc = (crc & 1) ? ((crc >>> 1) ^ 0xEDB88320) : (crc >>> 1);
+    }
+  }
+  return (crc ^ 0xFFFFFFFF) >>> 0;
+}
+
+/* Frame nach DJI-R-SDK-Struktur aufbauen: SOF|Ver/Len|CmdType|ENC|RES|SEQ|CRC16|DATA|CRC32 */
+function buildFrame(cmdSet, cmdId, payload, needResponse){
+  const data = new Uint8Array(2 + payload.length);
+  data[0] = cmdSet; data[1] = cmdId; data.set(payload, 2);
+  const totalLen = 12 + data.length + 4;
+  const frame = new Uint8Array(totalLen);
+  frame[0] = 0xAA;
+  frame[1] = totalLen & 0xFF;
+  frame[2] = (totalLen >> 8) & 0x03;      // Länge oberes Bit, Version = 0
+  frame[3] = needResponse ? 0x01 : 0x00;  // Response-Typ / Frame-Typ (Command)
+  frame[4] = 0x00;                        // keine Verschlüsselung
+  frame[8] = djiSeq & 0xFF;
+  frame[9] = (djiSeq >> 8) & 0xFF;
+  djiSeq = (djiSeq + 1) & 0xFFFF;
+  const c16 = crc16(frame.slice(0,10));
+  frame[10] = c16 & 0xFF;
+  frame[11] = (c16 >> 8) & 0xFF;
+  frame.set(data, 12);
+  const c32 = crc32(frame.slice(0, 12 + data.length));
+  frame[12+data.length]   = c32 & 0xFF;
+  frame[12+data.length+1] = (c32>>8) & 0xFF;
+  frame[12+data.length+2] = (c32>>16) & 0xFF;
+  frame[12+data.length+3] = (c32>>24) & 0xFF;
+  return frame;
+}
+
+async function setupDjiProtocol(server){
+  try{
+    const service = await server.getPrimaryService(DJI_SERVICE_UUID);
+    const chars = await service.getCharacteristics();
+    dbg('Dienst 0xFFF0 verbunden — ' + chars.length + ' Merkmal(e) gefunden');
+    chars.forEach(c=>{
+      const p = c.properties;
+      const props = ['write','writeWithoutResponse','notify','read'].filter(k=>p[k]).join(',');
+      dbg('  ' + c.uuid + '  [' + props + ']');
+      if(!djiWriteChar && (p.writeWithoutResponse || p.write)) djiWriteChar = c;
+      if(p.notify) djiNotifyChar = c;
+    });
+    if(djiNotifyChar){
+      await djiNotifyChar.startNotifications();
+      djiNotifyChar.addEventListener('characteristicvaluechanged', e=>{
+        dbg('Antwort: ' + toHex(new Uint8Array(e.target.value.buffer)));
+      });
+      dbg('Benachrichtigungen aktiv auf ' + djiNotifyChar.uuid);
+    }
+    if(djiWriteChar){
+      $('recBtn').disabled = false;
+      dbg('Bereit — "Aufnahme starten" ist jetzt aktiv');
+    } else {
+      dbg('Kein beschreibbares Merkmal gefunden — Aufnahmesteuerung nicht möglich');
+    }
+  }catch(e){
+    dbg('Dienst 0xFFF0 nicht gefunden (' + e.message + ')');
+    dbg('→ Diagnose mit App "nRF Connect" empfohlen, um echte Dienst-Kennung zu finden');
+  }
+}
+
+async function sendDjiFrame(cmdSet, cmdId, payload){
+  const frame = buildFrame(cmdSet, cmdId, payload, false);
+  dbg('Sende: ' + toHex(frame));
+  if(!djiWriteChar) return;
+  if(djiWriteChar.properties.writeWithoutResponse){
+    await djiWriteChar.writeValueWithoutResponse(frame);
+  } else {
+    await djiWriteChar.writeValue(frame);
+  }
+}
+
+async function attemptAutoRecord(start){
+  if(!djiWriteChar){
+    dbg((start ? 'Anpfiff' : 'Halbzeit/Abpfiff') + ' — Kamera nicht verbunden, Aufnahme manuell steuern');
+    return false;
+  }
+  recording = start;
+  const btn = $('recBtn');
+  btn.textContent = recording ? '■ Aufnahme stoppen' : '● Aufnahme starten';
+  btn.classList.toggle('active', recording);
+  try{
+    await sendDjiFrame(0x1D, 0x03, new Uint8Array([start ? 1 : 0]));
+    dbg('Automatisch: Aufnahme ' + (start ? 'gestartet' : 'gestoppt'));
+    return true;
+  }catch(e){
+    dbg('Automatischer Befehl fehlgeschlagen: ' + e.message);
+    return false;
+  }
+}
+
+async function toggleRecording(){
+  await attemptAutoRecord(!recording);
 }
 
 
@@ -560,16 +776,15 @@ function loadState(){
       setActions(true);
       tick = setInterval(render, 250);
     } else if(state === 'halftime'){
-      $('phase').textContent = 'Halbzeit — Spieluhr pausiert';
+      $('phase').textContent = 'Halbzeit — Spieluhr pausiert, Kamera läuft weiter';
       $('btnKickoff').textContent = '2. Halbzeit';
       tick = setInterval(render, 250);
     }
   }catch(e){}
 }
-// bei jeder Änderung speichern
 const _origRenderLog = renderLog;
 renderLog = function(){ _origRenderLog(); saveState(); };
-['kickoff','resumeSecond','halftime','fullTime'].forEach(fn => {
+['kickoff','resumeSecond','halftime','fullTime','resetAll'].forEach(fn => {
   const orig = window[fn];
   window[fn] = function(...a){ orig.apply(this,a); saveState(); };
 });

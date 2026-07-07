@@ -24,9 +24,18 @@ Web-App zum Setzen von Zeitmarkern (Tor, Gegentor, Chance, Foul …) mit Komment
 
 - Marker werden automatisch auf dem Gerät gespeichert — auch wenn die App
   zwischendurch geschlossen wird, geht während des Spiels nichts verloren.
-- Beim Abpfiff wird eine JSON-Datei mit allen Markern heruntergeladen
-  (Dateiname frei wählbar).
-- Kamera-Verbindung per Bluetooth zeigt aktuell den Verbindungsstatus.
-  Fernsteuerung der Aufnahme (Start/Stopp aus der App) ist als Ausbaustufe geplant
-  und benötigt das genaue Kameramodell.
+- Beim Abpfiff werden zwei .txt-Dateien nacheinander heruntergeladen:
+  eine fürs Video-Analyzer-Programm, eine ausführliche mit Kommentaren.
+- **Kamera-Aufnahme per Bluetooth starten/stoppen (experimentell):**
+  Nach dem Verbinden erscheint ein "Aufnahme starten"-Button. Nutzt das
+  offizielle DJI-R-SDK-Protokoll, gültig für die ganze Osmo-Action-Reihe.
+  Da dies ohne Testgerät entwickelt wurde, kann es Anpassung brauchen —
+  der "Protokoll"-Button zeigt ein Diagnose-Fenster mit den gesendeten/
+  empfangenen Bluetooth-Daten.
+- **Wichtig für iPhone:** Safari unterstützt kein Web-Bluetooth. Für die
+  Kamera-Funktionen die kostenlose App **"Bluefy – Web BLE Browser"**
+  aus dem App Store nutzen und die GitHub-Pages-URL darin öffnen.
+  Android mit Chrome funktioniert direkt.
+- Vor dem Verbinden die DJI-Mimo-App auf dem Handy schließen, damit sie
+  nicht gleichzeitig eine eigene Bluetooth-Verbindung zur Kamera hält.
 - Web-Bluetooth funktioniert auf Android mit Chrome. Auf iPhone/Safari nicht.
