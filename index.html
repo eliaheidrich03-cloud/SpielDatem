@@ -159,6 +159,9 @@
       <span class="dot"></span><span id="camLbl">Kamera verbinden</span>
     </button>
   </div>
+  <div class="camrow" style="justify-content:flex-start">
+    <button class="dbg" onclick="connectCamera(true)">Diagnose: alle Geräte suchen</button>
+  </div>
   <div class="dbglog" id="dbgLog"></div>
 
   <div class="board">
@@ -573,10 +576,11 @@ function download(name, text, type){
 let btDevice = null;
 function recInfo(){ $('recBg').classList.add('open'); }
 
-async function connectCamera(){
+async function connectCamera(diagnoseAll){
   const btn = $('camBtn'), lbl = $('camLbl');
-  if(btDevice && btDevice.gatt.connected){ btDevice.gatt.disconnect(); return; }
+  if(!diagnoseAll && btDevice && btDevice.gatt.connected){ btDevice.gatt.disconnect(); return; }
   if(!navigator.bluetooth){
+    dbg('navigator.bluetooth ist nicht vorhanden — Browser unterstützt kein Web-Bluetooth');
     lbl.textContent = 'Bluetooth hier nicht verfügbar (iPhone: App "Bluefy" nutzen)';
     setTimeout(()=>{ if(!btDevice) lbl.textContent = 'Kamera verbinden'; }, 4000);
     return;
@@ -584,10 +588,12 @@ async function connectCamera(){
   try{
     btn.classList.add('searching');
     lbl.textContent = 'Suche…';
-    btDevice = await navigator.bluetooth.requestDevice({
-      filters: [{namePrefix:'DJI'},{namePrefix:'Osmo'},{namePrefix:'OA'}],
-      optionalServices: [0xfff0]
-    });
+    const options = diagnoseAll
+      ? { acceptAllDevices: true, optionalServices: [0xfff0] }
+      : { filters: [{namePrefix:'DJI'},{namePrefix:'Osmo'},{namePrefix:'OA'}], optionalServices: [0xfff0] };
+    dbg((diagnoseAll ? 'Diagnose' : 'Verbinden') + ' — requestDevice mit: ' + JSON.stringify(options));
+    btDevice = await navigator.bluetooth.requestDevice(options);
+    dbg('Gerät ausgewählt: ' + (btDevice.name || '(ohne Namen)'));
     btDevice.addEventListener('gattserverdisconnected', ()=>{
       btn.classList.remove('connected','searching');
       lbl.textContent = 'Kamera verbinden';
@@ -606,6 +612,8 @@ async function connectCamera(){
     lbl.textContent = 'Kamera verbinden';
     btDevice = null;
     dbg('Verbindung fehlgeschlagen: ' + describeError(e));
+    debugOn = true;
+    $('dbgLog').classList.add('show');
   }
 }
 
